@@ -3,3 +3,6 @@
 
 common-lib
 common-lib/*
+
+private.pem
+public.pem

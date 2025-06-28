@@ -1,0 +1,2 @@
+CREATE DATABASE IF NOT EXISTS user_service_db;
+CREATE DATABASE IF NOT EXISTS task_service_db;

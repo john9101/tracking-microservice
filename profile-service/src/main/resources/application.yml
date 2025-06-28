@@ -1,0 +1,39 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: profile-service
+
+  messages:
+    basename: i18n/messages
+    encoding: UTF-8
+
+dubbo:
+  application:
+    name: profile-service
+    qos-enable: false
+  registry:
+    address: zookeeper://localhost:2181
+  protocol:
+    name: dubbo
+    port: -1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    prometheus:
+      access: unrestricted
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+springdoc:
+  api-docs:
+    path: /profiles/v3/api-docs
+  swagger-ui:
+    enabled: false

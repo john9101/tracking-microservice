@@ -1,0 +1,290 @@
+services:
+  tracking-mysql:
+    image: mysql:latest
+    container_name: tracking-mysql
+    ports:
+      - '3307:3306'
+    restart: always
+    volumes:
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: [ 'CMD', 'mysqladmin', 'ping', '-h', 'localhost' ]
+      timeout: 10s
+      retries: 10
+      interval: 10s
+      start_period: 10s
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_DATASOURCE_USERNAME: root
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+#  tracking-elasticsearch:
+#    image: elasticsearch:8.18.0
+#    container_name: tracking-elasticsearch
+#    ports:
+#      - '9200:9200'
+#    volumes:
+#      - elasticsearch-data:/usr/share/elasticsearch/data
+#    healthcheck:
+#      test: [ "CMD-SHELL", "curl -f http://localhost:9200 || exit 1" ]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 5
+#    extends:
+#      file: common-config.yml
+#      service: network-deploy-service
+
+  tracking-redis:
+    image: redis:latest
+    container_name: tracking-redis
+    command: [ 'redis-server', '--requirepass', 'pw1234' ]
+    ports:
+      - '6379:6379'
+    environment:
+      REDIS_HOST: localhost
+      REDIS_POST: 6379
+      REDIS_PASSWORD: pw1234
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  #  tracking-zookeeper:
+  #    image: zookeeper:latest
+  #    container_name: tracking-zookeeper
+  #    ports:
+  #      - '2181:2181'
+  #    environment:
+  #      ZOO_MY_ID: 1
+  #      ZOO_PORT: 2181
+  #      ZOO_TICK_TIME: 2000
+  #      ZOO_INIT_LIMIT: 10
+  #      ZOO_SYNC_LIMIT: 5
+  #      ZOO_STANDALONE_ENABLED: 'true'
+  #    extends:
+  #      file: common-config.yml
+  #      service: network-deploy-service
+
+  tracking-zookeeper:
+    image: confluentinc/cp-zookeeper:latest-ubi8
+    container_name: tracking-zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_MAX_CLIENT_CNXNS: 1000
+      ZOOKEEPER_AUTOPURGE_PURGEINTERVAL: 1
+      ZOOKEEPER_AUTOPURGE_SNAPRETAINCOUNT: 3
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  tracking-kafka:
+    image: confluentinc/cp-kafka:latest-ubi8
+    container_name: tracking-kafka
+    ports:
+      - '9092:9092'
+      - '9093:9093'
+    depends_on:
+      - tracking-zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: tracking-zookeeper:2181
+#      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+#      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+
+#      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://tracking-kafka:9092,PLAINTEXT_HOST://localhost:9092
+#      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+#      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+#      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://tracking-kafka:9092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  tracking-kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: tracking-kafka-ui
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: tracking-kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: tracking-zookeeper:2181
+    depends_on:
+      - tracking-kafka
+      - tracking-zookeeper
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  tracking-vault:
+    image: vault:1.13.3
+    container_name: tracking-vault
+    ports:
+      - '8200:8200'
+    entrypoint: /bin/sh -c 'vault server -dev & sleep 5 && /init-vault.sh && tail -f /dev/null'
+    volumes:
+      - ./init-vault.sh:/init-vault.sh
+      - ./private.pem:/private.pem
+      - ./public.pem:/public.pem
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: root
+      VAULT_DEV_LISTEN_ADDRESS: '0.0.0.0:8200'
+      VAULT_ADDR: 'http://127.0.0.1:8200'
+    cap_add:
+      - IPC_LOCK
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  tracking-prometheus:
+    image: prom/prometheus:main
+    container_name: tracking-prometheus
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  tracking-temporal:
+    image: temporalio/auto-setup:latest
+    container_name: tracking-temporal
+    ports:
+      - '7233:7233'
+    restart: always
+#    healthcheck:
+#      test: [ "CMD", "tctl", "--address", "localhost:7233", "namespace", "list" ]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 10
+    environment:
+      DB: mysql8
+      MYSQL_USER: root
+      MYSQL_PWD: root
+      MYSQL_SEEDS: tracking-mysql
+      MYSQL_PORT: 3306
+      ENABLE_ES: false
+#      ES_SEEDS: tracking-elasticsearch
+    depends_on:
+      tracking-mysql:
+        condition: service_healthy
+#      tracking-elasticsearch:
+#        condition: service_healthy
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+
+  tracking-temporal-web:
+    image: temporalio/web:latest
+    container_name: tracking-temporal-web
+    ports:
+      - '8088:8088'
+    depends_on:
+      - tracking-temporal
+    environment:
+      TEMPORAL_GRPC_ENDPOINT: tracking-temporal:7233
+      TEMPORAL_PERMIT_WRITE_API: true
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  tracking-temporal-admin-tools:
+    image: temporalio/admin-tools:latest
+    container_name: tracking-temporal-admin-tools
+    depends_on:
+      - tracking-temporal
+    environment:
+      TEMPORAL_CLI_ADDRESS: tracking-temporal:7233
+    stdin_open: true
+    tty: true
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  tracking-jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: tracking-jaeger
+    ports:
+#      - '16686:16686'
+#      - '4317:4317'
+#      - '4318:4318'
+#      - '6831:6831/udp'
+#      - '6832:6832/udp'
+#      - '5778:5778'
+#      - '14250:14250'
+#      - '14268:14268'
+#      - '9411:9411'
+      - 5775:5775
+      - 6831:6831/udp
+      - 5778:5778
+      - 16686:16686
+      - 14268:14268
+      - 14250:14250
+      - 14255:14255
+      - 4317:4317
+    environment:
+      COLLECTOR_ZIPKIN_HTTP_PORT: 9411
+      JAEGER_AGENT_PORT: 5775
+      COLLECTOR_OTLP_ENABLED: true
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  tracking-influxdb:
+    image:  influxdb:1.11.8
+    container_name: tracking-influxdb
+    ports:
+      - '8086:8086'
+    environment:
+      - INFLUXDB_DB=k6
+      - INFLUXDB_HTTP_AUTH_ENABLED=true
+      - INFLUXDB_ADMIN_USER=k6
+      - INFLUXDB_ADMIN_PASSWORD=k6
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+
+  tracking-grafana:
+    image: grafana/grafana:main-ubuntu
+    container_name: tracking-grafana
+    ports:
+      - '3000:3000'
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+networks:
+  tracking_microservice_network:
+    driver: 'bridge'
+
+volumes:
+  mysql-data:
+#  elasticsearch-data:
+  grafana-storage:

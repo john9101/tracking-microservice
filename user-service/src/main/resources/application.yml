@@ -1,0 +1,59 @@
+server:
+  port: 8080
+#  servlet:
+#    context-path: /users
+
+spring:
+  application:
+    name: user-service
+
+  messages:
+    basename: i18n/messages
+    encoding: UTF-8
+
+  datasource:
+    url: '${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3307/user_service_db}'
+    username: '${SPRING_DATASOURCE_PASSWORD:root}'
+    password: '${SPRING_DATASOURCE_PASSWORD:root}'
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+#  health:
+#    readiness-state:
+#      enabled: true
+#    liveness-state:
+#      enabled: true
+  endpoint:
+    prometheus:
+      access: unrestricted
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  metrics:
+    tags:
+      application: '${spring.application.name}'
+
+
+springdoc:
+  api-docs:
+    path: /users/v3/api-docs
+  swagger-ui:
+    enabled: false
+#    path: /swagger-ui.html
+
+dubbo:
+  application:
+    name: user-service
+  registry:
+    address: zookeeper://localhost:2181
+  protocol:
+    name: dubbo
+    port: -1

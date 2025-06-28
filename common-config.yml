@@ -1,0 +1,27 @@
+services:
+  network-deploy-service:
+    networks:
+      - tracking_microservice_network
+
+#  microservice-db-config:
+#    extends:
+#      service: network-deploy-service
+#    image: mysql:latest
+#    healthcheck:
+#      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+#      timeout: 10s
+#      retries: 10
+#      interval: 10s
+#      start_period: 10s
+#    environment:
+#      MYSQL_ROOT_PASSWORD: root
+#      SPRING_DATASOURCE_PASSWORD: root
+#      SPRING_DATASOURCE_USERNAME: root
+
+  microservice-base-config:
+    extends:
+      service: network-deploy-service
+    deploy:
+      resources:
+        limits:
+          memory: 700m

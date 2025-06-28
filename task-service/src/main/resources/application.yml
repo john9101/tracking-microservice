@@ -1,0 +1,112 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: task-service
+
+  messages:
+    basename: i18n/messages
+    encoding: UTF-8
+
+  datasource:
+    url: '${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3307/task_service_db}'
+    username: '${SPRING_DATASOURCE_USERNAME:root}'
+    password: '${SPRING_DATASOURCE_PASSWORD:root}'
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  cache:
+    type: redis
+  data:
+    redis:
+      host: '${REDIS_HOST:localhost}'
+      port: '${REDIS_PORT:6379}'
+      password: '${REDIS_PASSWORD:pw1234}'
+
+  cloud:
+    vault:
+      uri: http://localhost:8200
+      token: root
+      kv:
+        enabled: true
+        backend: secret
+        default-context: task-service
+  config:
+    import: vault://
+
+temporal:
+  connection:
+    target: localhost:7233
+  namespace: TrackingTaskService
+
+dubbo:
+  application:
+    name: task-service
+    qos-enable: false
+  registry:
+    address: zookeeper://localhost:2181
+  protocol:
+    name: dubbo
+    port: -1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    prometheus:
+      access: unrestricted
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      taskServiceCB:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 5s
+        permittedNumberOfCallsInHalfOpenState: 3
+        slidingWindowType: COUNT_BASED
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+
+  retry:
+    instances:
+      taskServiceRetry:
+        maxAttempts: 3
+        waitDuration: 2s
+
+  ratelimiter:
+    instances:
+      taskServiceRateLimiter:
+        limitForPeriod: 10
+        limitRefreshPeriod: 1s
+        timeoutDuration: 500ms
+
+  timelimiter:
+    instances:
+      taskServiceTimeLimiter:
+        timeoutDuration: 4s
+        cancelRunningFuture: true
+
+  bulkhead:
+    instances:
+      taskServiceBulkhead:
+        maxConcurrentCalls: 5
+        maxWaitDuration: 500ms
+
+springdoc:
+  api-docs:
+    path: /tasks/v3/api-docs
+  swagger-ui:
+    enabled: false
+#    path: /swagger-ui.html
+

@@ -1,0 +1,114 @@
+server:
+  port: 9000
+#  servlet:
+#    context-path: /auth
+
+
+spring:
+  application:
+    name: auth-service
+
+  messages:
+    basename: i18n/messages
+    encoding: UTF-8
+
+  cloud:
+    stream:
+      bindings:
+        registration-out-0:
+          destination: registration-topic
+      kafka:
+        binder:
+          brokers: localhost:9093
+
+    vault:
+      uri: http://localhost:8200
+      token: root
+      kv:
+        enabled: true
+        backend: secret
+        default-context: auth-service
+
+  config:
+    import: vault://
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    prometheus:
+      access: unrestricted
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+    enabled: true
+  otlp:
+    tracing:
+      endpoint: http://localhost:4317
+      export:
+        enabled: true
+      transport: grpc
+
+dubbo:
+  application:
+    name: auth-service
+    qos-enable: false
+  registry:
+    address: zookeeper://localhost:2181
+  protocol:
+    name: dubbo
+    port: -1
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      defaultCB:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 5s
+        permittedNumberOfCallsInHalfOpenState: 3
+        slidingWindowType: COUNT_BASED
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+
+  retry:
+    instances:
+      defaultRetry:
+        maxAttempts: 3
+        waitDuration: 2s
+
+  ratelimiter:
+    instances:
+      defaultRateLimiter:
+        limitForPeriod: 10
+        limitRefreshPeriod: 1s
+        timeoutDuration: 500ms
+
+  timelimiter:
+    instances:
+      defaultTimeLimiter:
+        timeoutDuration: 4s
+        cancelRunningFuture: true
+
+  bulkhead:
+    instances:
+      defaultBulkhead:
+        maxConcurrentCalls: 5
+        maxWaitDuration: 500ms
+
+springdoc:
+  api-docs:
+    path: /auth/v3/api-docs
+  swagger-ui:
+    enabled: false
+
+#    path: /swagger-ui.html
+
